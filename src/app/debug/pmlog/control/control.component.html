@@ -1,0 +1,45 @@
+<div class="modal-body">
+  <table>
+    <thead>
+      <tr>
+        <th>Context</th>
+        <th>Level</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          <label class="form-label" for="log-level-all">All</label>
+        </td>
+        <td>
+
+          <select class="form-select" [ngModel]="defaultLevel" (change)="changeAllLogLevel($any(allLevelSelect.value))"
+            id="log-level-all" #allLevelSelect>
+            @for (item of logLevels; track item) {
+              <option [value]="item.level">{{item.label}}</option>
+            }
+          </select>
+        </td>
+      </tr>
+      @for (context of contexts; track context) {
+        <tr>
+          <td>
+            <label class="form-label" [for]="'log-level-'+context[0]">{{context[0]}}</label>
+          </td>
+          <td>
+            <select class="form-select" [ngModel]="context[1]" (change)="changeLogLevel(context[0], levelSelect.value)"
+              [id]="'log-level-'+context[0]" #levelSelect>
+              @for (item of logLevels; track item) {
+                <option [value]="item.level">{{item.label}}</option>
+              }
+            </select>
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>
+<div class="modal-footer">
+  <button class="btn btn-secondary" (click)="showSetLevel()">Set level...</button>
+  <button class="btn btn-primary ms-auto" (click)="modal.dismiss()">Close</button>
+</div>

@@ -1,0 +1,35 @@
+@use 'bootstrap' as bs;
+@use 'bootstrap-icons';
+@use '@xterm/xterm';
+
+@import './styles/no-select';
+@import './styles/app-item';
+@import './styles/overflow';
+@import './styles/terminal';
+@import './styles/shared';
+
+
+@import 'highlight.js/scss/github.scss' screen and (prefers-color-scheme: light);
+@import 'highlight.js/scss/github-dark.scss' screen and (prefers-color-scheme: dark);
+
+/*
+ * Content
+ */
+
+html, body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0);
+  padding-right: env(safe-area-inset-right, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  padding-left: env(safe-area-inset-left, 0);
+}
+
+.bg-panel {
+  @extend .bg-dark-subtle;
+}

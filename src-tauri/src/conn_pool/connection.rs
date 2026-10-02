@@ -1,0 +1,180 @@
+use std::fmt::{Debug, Formatter};
+use std::io::Read;
+use std::ops::{Deref, DerefMut};
+use std::path::Path;
+use std::sync::Mutex;
+
+use ares_connection_lib::session::{authenticate, connect, SshConnection};
+use libssh_rs::Session;
+use regex::Regex;
+use uuid::Uuid;
+
+use crate::conn_pool::{DeviceConnection, DeviceConnectionUserInfo, Id};
+use crate::device_manager::privkey::PrivateKeyExt;
+use crate::device_manager::{Device, DeviceFileTransfer};
+use crate::error::Error;
+
+impl DeviceConnection {
+    pub(crate) fn new(device: Device, ssh_dir: Option<&Path>) -> Result<DeviceConnection, Error> {
+        let session = connect(&device)?;
+        // The key is read here, not by the shared code: this app resolves a key
+        // name against its own SSH directory, and falls back to the parent
+        // directory on mobile.
+        let key = device
+            .private_key
+            .as_ref()
+            .map(|k| k.read_content(ssh_dir))
+            .transpose()?;
+        authenticate(&session, &device, key.as_deref())?;
+        let connection = DeviceConnection {
+            id: Uuid::new_v4(),
+            device: device.clone(),
+            user: DeviceConnectionUserInfo::new(&session)?,
+            session,
+            last_ok: Mutex::new(true),
+        };
+        log::info!("{:?} created", connection);
+        Ok(connection)
+    }
+
+    pub(super) fn reset_last_ok(&self) {
+        *self
+            .last_ok
+            .lock()
+            .expect("Failed to lock DeviceConnection::last_ok") = false;
+    }
+
+    pub fn mark_last_ok(&self) {
+        *self
+            .last_ok
+            .lock()
+            .expect("Failed to lock DeviceConnection::last_ok") = true;
+    }
+
+}
+
+impl SshConnection for DeviceConnection {
+    fn session(&self) -> &Session {
+        &self.session
+    }
+
+    fn supports_sftp(&self) -> bool {
+        !matches!(self.device.files, Some(DeviceFileTransfer::Stream))
+    }
+
+    fn is_root(&self) -> bool {
+        self.user.as_ref().is_some_and(|user| user.uid.id == 0)
+    }
+}
+
+impl Deref for DeviceConnection {
+    type Target = Session;
+
+    fn deref(&self) -> &Self::Target {
+        &self.session
+    }
+}
+
+impl DerefMut for DeviceConnection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.session
+    }
+}
+
+impl Drop for DeviceConnection {
+    fn drop(&mut self) {
+        log::info!(
+            "Dropping {:?}, last_ok={}",
+            self,
+            self.last_ok
+                .lock()
+                .expect("Failed to lock DeviceConnection::last_ok")
+        );
+    }
+}
+
+impl Debug for DeviceConnection {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "DeviceConnection {{ id={}, device.name={}, user={:?} }}",
+            self.id, self.device.name, self.user,
+        ))
+    }
+}
+
+impl DeviceConnectionUserInfo {
+    fn new(session: &Session) -> Result<Option<DeviceConnectionUserInfo>, Error> {
+        let ch = session.new_channel()?;
+        ch.open_session()?;
+        ch.request_exec("id")?;
+        let mut buf = String::new();
+        ch.stdout().read_to_string(&mut buf)?;
+        let exit_code = ch.get_exit_status().unwrap_or(0);
+        ch.close()?;
+        if exit_code != 0 {
+            return Err(Error::Message {
+                message: format!("id command failed with exit code {}", exit_code),
+                unhandled: false,
+            });
+        }
+        Ok(DeviceConnectionUserInfo::parse(&buf))
+    }
+
+    fn parse(s: &str) -> Option<DeviceConnectionUserInfo> {
+        let mut uid: Option<Id> = None;
+        let mut gid: Option<Id> = None;
+        let mut groups: Vec<Id> = Vec::new();
+        for seg in s.split_ascii_whitespace() {
+            let Some((k, v)) = seg.split_once('=') else {
+                continue;
+            };
+            match k {
+                "uid" => {
+                    uid = Id::parse(v);
+                }
+                "gid" => {
+                    gid = Id::parse(v);
+                }
+                "groups" => {
+                    for group in v.split(',') {
+                        if let Some(id) = Id::parse(group) {
+                            groups.push(id);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        let (Some(uid), Some(gid)) = (uid, gid) else {
+            return None;
+        };
+        Some(DeviceConnectionUserInfo { uid, gid, groups })
+    }
+}
+
+impl Debug for Id {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if let Some(name) = &self.name {
+            f.write_fmt(format_args!("{}({})", self.id, name))
+        } else {
+            f.write_fmt(format_args!("{}", self.id))
+        }
+    }
+}
+
+impl Id {
+    fn parse(s: &str) -> Option<Self> {
+        let regex = Regex::new("(\\d+)(\\(\\w+\\))?").unwrap();
+        let Some(caps) = regex.captures(s) else {
+            return None;
+        };
+        Some(Self {
+            id: u32::from_str_radix(caps.get(1).unwrap().as_str(), 10).unwrap(),
+            name: caps.get(2).map(|s| {
+                s.as_str()
+                    .trim_matches(|c| c == '(' || c == ')')
+                    .to_string()
+            }),
+        })
+    }
+}

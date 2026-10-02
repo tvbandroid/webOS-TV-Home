@@ -1,0 +1,55 @@
+<!--suppress JSUnusedGlobalSymbols -->
+<ul ngbNav #nav="ngbNav" class="nav-pills d-none" orientation="horizontal" [activeId]="activateId">
+  <li ngbNavItem="mode-select">
+    <a ngbNavLink>Connection Mode</a>
+    <ng-template ngbNavContent>
+      <app-wizard-mode-select [(mode)]="connectionMode" (proceed)="finishConnectionModeSelection()">
+      </app-wizard-mode-select>
+      <ng-template appWizardFooterTemplate>
+        <button class="btn btn-primary ms-auto" [disabled]="!connectionMode"
+                (click)="finishConnectionModeSelection()" aria-label="Next">Next
+        </button>
+      </ng-template>
+    </ng-template>
+  </li>
+  @if (connectionMode === 'devMode') {
+    <li ngbNavItem="devmode-setup">
+      <a ngbNavLink>Setup Developer Mode</a>
+      <ng-template ngbNavContent>
+        <app-wizard-devmode-setup #devModeSetup></app-wizard-devmode-setup>
+        <ng-template appWizardFooterTemplate>
+          <button class="btn btn-outline-secondary" (click)="prevStep()" aria-label="Back">Back</button>
+          @if (devModeSetup.allDone) {
+            <button class="btn btn-primary ms-auto" (click)="editDevice()" aria-label="Next">Next</button>
+          } @else {
+            <button class="btn btn-primary ms-auto" (click)="editDevice()" aria-label="Skip">Skip</button>
+          }
+        </ng-template>
+      </ng-template>
+    </li>
+  }
+  <li ngbNavItem="device-info">
+    <a ngbNavLink>Setup Device</a>
+    <ng-template ngbNavContent>
+      <app-wizard-add-device [mode]="connectionMode" (deviceAdded)="deviceAdded($event)" #addDevice>
+      </app-wizard-add-device>
+      <ng-template appWizardFooterTemplate>
+        <button class="btn btn-outline-secondary" (click)="prevStep()" aria-label="Back">Back</button>
+        <button class="btn btn-primary ms-auto" (click)="addDevice.submit()" [disabled]="!addDevice.valid"
+                aria-label="Finish">Finish
+        </button>
+      </ng-template>
+    </ng-template>
+  </li>
+</ul>
+<div class="modal-header">
+  <h5 class="modal-title">{{ navTitle }}</h5>
+  @if (cancellable) {
+    <button class="btn btn-close me-1" (click)="modal.dismiss()" aria-label="Close"></button>
+  }
+</div>
+<div class="modal-body" [ngbNavOutlet]="nav">
+</div>
+<div class="modal-footer">
+  <ng-container *ngTemplateOutlet="footerTemplate"></ng-container>
+</div>

@@ -1,0 +1,59 @@
+@if (detailsField; as details) {
+  <div class="d-flex flex-column w-100 h-100">
+    <div class="border-bottom">
+      <button class="btn btn-link" (click)="closeClick.emit()"><i class="bi bi-x"></i></button>
+    </div>
+    <div class="flex-fill overflow-x-hidden overflow-y-auto">
+      <table class="table table-sm table-striped table-hover">
+        <thead>
+          <tr>
+            <th>Data</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (message of details.messages; track message) {
+            <tr (click)="selectedMessage = message">
+              <td class="text-nowrap">
+                <small>
+                  @switch (message.type) {
+                    @case ('call') {
+                      <i class="bi bi-arrow-right"></i>
+                    }
+                    @case ('return') {
+                      <i class="bi bi-arrow-left"></i>
+                    }
+                    @case ('callCancel') {
+                      <i class="bi bi-x-lg"></i>
+                    }
+                  }
+                </small>
+                {{ message.information }}
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    @if (selectedMessage; as selected) {
+      <div class="border-top h-50 overflow-auto message-selected user-select-text">
+        <div class="small p-2 border-bottom">
+          <div><b>Type</b>: {{ selected.type }}</div>
+          <div><b>Sender</b>: {{ selected.sender }}</div>
+          <div><b>Destination</b>: {{ selected.destination }}@if (selected.methodCategory !== '/') {
+          <span
+          >{{ selected.methodCategory }}</span>
+          }@if (selected.method) {
+          <span
+          >/{{ selected.method }}</span>
+        }</div>
+      </div>
+      @if (selected.payload; as payload) {
+        <pre class="p-2"><code [innerHtml]="payload | objectHighlight"></code></pre>
+      }
+      @if (selected.rawPayload; as raw) {
+        <pre class="p-2"><code>{{ raw }}</code></pre>
+      }
+    </div>
+  }
+</div>
+}
